@@ -1,0 +1,213 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: 2rem 1.5rem;
+  padding-bottom: 6rem; /* Space for bottom nav */
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2.5rem;
+}
+
+.title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.profilePic {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 1.1rem;
+  box-shadow: 0 0 15px rgba(82, 113, 255, 0.4);
+}
+
+.balanceCard {
+  padding: 2rem;
+  margin-bottom: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.balanceCard::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -20%;
+  width: 150px;
+  height: 150px;
+  background: var(--primary-glow);
+  filter: blur(50px);
+  border-radius: 50%;
+  z-index: 0;
+}
+
+.balanceLabel {
+  font-size: 0.9rem;
+  color: #94a3b8;
+  z-index: 1;
+}
+
+.balanceAmount {
+  font-size: 3rem;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.currency {
+  font-size: 1.5rem;
+  color: var(--nimiq-gold);
+  font-weight: 700;
+}
+
+.actionGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 2.5rem;
+}
+
+.actionButton {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  text-align: center;
+  font-weight: 600;
+  color: white;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.actionButton:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.iconWrapper {
+  width: 48px;
+  height: 48px;
+  border-radius: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.actionButton.primary .iconWrapper {
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  box-shadow: 0 4px 15px rgba(82, 113, 255, 0.4);
+}
+
+.sectionTitle {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  color: #f8fafc;
+}
+
+.activityList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.activityItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem;
+  transition: all 0.2s ease;
+}
+
+.activityItem:hover {
+  background: rgba(30, 41, 59, 0.8);
+}
+
+.activityLeft {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.activityIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+}
+
+.activityDetails {
+  display: flex;
+  flex-direction: column;
+}
+
+.activityTitle {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.activityDate {
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.activityRight {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.activityAmount {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.activityAmount.positive {
+  color: var(--success);
+}
+
+.activityAmount.negative {
+  color: var(--foreground);
+}
+
+.activityStatus {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 1rem;
+  margin-top: 0.2rem;
+}
+
+.statusPending {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fcd34d;
+}
+
+.statusSettled {
+  background: rgba(16, 185, 129, 0.2);
+  color: #6ee7b7;
+}

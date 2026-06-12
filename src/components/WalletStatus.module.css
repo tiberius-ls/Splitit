@@ -1,0 +1,73 @@
+.walletStatus {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.connected {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(82, 113, 255, 0.15);
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(82, 113, 255, 0.3);
+}
+
+.addressButton {
+  background: none;
+  border: none;
+  color: var(--primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 0;
+  transition: opacity 0.2s;
+  font-family: monospace;
+}
+
+.addressButton:hover {
+  opacity: 0.8;
+}
+
+.disconnectBtn {
+  background: none;
+  border: none;
+  color: var(--primary);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  transition: opacity 0.2s;
+}
+
+.disconnectBtn:hover {
+  opacity: 0.6;
+}
+
+.connectBtn {
+  background: linear-gradient(135deg, var(--primary), #7c3aed);
+  border: none;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: opacity 0.2s;
+}
+
+.connectBtn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.connectBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
