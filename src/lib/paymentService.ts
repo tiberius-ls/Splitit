@@ -1,151 +1,120 @@
 'use client';
 
-import { NimiqProvider } from './nimiqProvider';
+import { isErrorResponse, nimToLunas, type NimiqProvider } from './nimiqProvider';
 
 export interface PaymentTransaction {
   recipient: string;
+  /** Amount in NIM (human units). Converted to Lunas before sending. */
   amount: string;
-  currency: 'NIM' | 'USDT';
   message?: string;
-  chainId?: number;
 }
 
 export interface TransactionResult {
   success: boolean;
-  txHash?: string;
+  /** Serialized transaction returned by the wallet. */
+  tx?: string;
   error?: string;
   message: string;
 }
 
 /**
- * Send a payment transaction via Nimiq SDK
- * Supports both NIM and USDT on multiple chains
+ * Encode a UTF-8 string to a hex string for an on-chain transaction message.
+ */
+const toHex = (text: string): string =>
+  Array.from(new TextEncoder().encode(text))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+
+/**
+ * Send a real NIM payment through Nimiq Pay. Nimiq Pay shows a native
+ * confirmation dialog; the user's keys never leave the wallet.
+ *
+ * USDT / EVM transfers are not handled here — they would go through
+ * `window.ethereum`, which this mini-app does not yet implement.
  */
 export const sendPayment = async (
-  nimiq: NimiqProvider,
-  transaction: PaymentTransaction
+  provider: NimiqProvider,
+  transaction: PaymentTransaction,
 ): Promise<TransactionResult> => {
+  // Validate inputs
+  const cleanRecipient = transaction.recipient?.trim();
+  if (!cleanRecipient) {
+    return { success: false, error: 'Missing recipient', message: 'A recipient address is required' };
+  }
+  if (!isValidAddress(cleanRecipient)) {
+    return { success: false, error: 'Invalid address', message: 'Recipient is not a valid Nimiq address' };
+  }
+
+  const amountNum = parseFloat(transaction.amount);
+  if (isNaN(amountNum) || amountNum <= 0) {
+    return { success: false, error: 'Invalid amount', message: 'Amount must be a positive number' };
+  }
+
   try {
-    if (!nimiq.initialized || !nimiq.account) {
+    const value = nimToLunas(amountNum);
+    const message = transaction.message?.trim();
+
+    const result = message
+      ? await provider.sendBasicTransactionWithData({
+          recipient: cleanRecipient,
+          value,
+          data: toHex(message),
+        })
+      : await provider.sendBasicTransaction({ recipient: cleanRecipient, value });
+
+    if (isErrorResponse(result)) {
       return {
         success: false,
-        error: 'Wallet not connected',
-        message: 'Please connect your wallet first',
+        error: result.error.type,
+        message: result.error.message || 'The wallet rejected the transaction',
       };
     }
-
-    // Validate inputs
-    if (!transaction.recipient || !transaction.amount) {
-      return {
-        success: false,
-        error: 'Missing required fields',
-        message: 'Recipient and amount are required',
-      };
-    }
-
-    const amountNum = parseFloat(transaction.amount);
-    if (isNaN(amountNum) || amountNum <= 0) {
-      return {
-        success: false,
-        error: 'Invalid amount',
-        message: 'Amount must be a positive number',
-      };
-    }
-
-    // Build transaction payload
-    const txPayload = {
-      from: nimiq.account,
-      to: transaction.recipient,
-      amount: amountNum,
-      currency: transaction.currency,
-      message: transaction.message || `Payment via SplitIt`,
-      timestamp: new Date().toISOString(),
-    };
-
-    // Sign the transaction
-    const signedTx = await nimiq.sign(JSON.stringify(txPayload));
-
-    if (!signedTx) {
-      return {
-        success: false,
-        error: 'Transaction signing failed',
-        message: 'Could not sign transaction',
-      };
-    }
-
-    // In a production app, you would send this to a server
-    // For now, we'll simulate a successful transaction
-    const txHash = generateTxHash();
-
-    console.log('✅ Transaction signed and submitted:', {
-      txHash,
-      payload: txPayload,
-      signature: signedTx,
-    });
 
     return {
       success: true,
-      txHash,
-      message: `Successfully sent ${transaction.amount} ${transaction.currency} to ${transaction.recipient}`,
+      tx: result,
+      message: `Sent ${amountNum} NIM to ${formatAddress(cleanRecipient)}`,
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('Payment error:', error);
-    return {
-      success: false,
-      error: errorMessage,
-      message: `Transaction failed: ${errorMessage}`,
-    };
+    return { success: false, error: errorMessage, message: `Transaction failed: ${errorMessage}` };
   }
 };
 
 /**
- * Generate a mock transaction hash for demo purposes
- */
-export const generateTxHash = (): string => {
-  return '0x' + Array.from(crypto.getRandomValues(new Uint8Array(32)))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-};
-
-/**
- * Create a payment request URL/QR code data
- * Format: nimiq:address?amount=X&message=Y
+ * Create a Nimiq payment request URI for a QR code.
+ * Format: nimiq:<address>?amount=<NIM>&message=<text>
  */
 export const createPaymentRequest = (
   address: string,
   amount: string,
-  currency: 'NIM' | 'USDT' = 'NIM',
-  message?: string
+  message?: string,
 ): string => {
   if (!address) return '';
-  
-  const baseUrl = currency === 'NIM' 
-    ? `nimiq:${address.replace(/\s/g, '')}`
-    : `ethereum:${address.replace(/\s/g, '')}/transfer`;
-
+  const base = `nimiq:${address.replace(/\s/g, '')}`;
   const params = new URLSearchParams();
   if (amount) params.append('amount', amount);
-  if (message) params.append('message', encodeURIComponent(message));
-  
-  const queryString = params.toString();
-  return queryString ? `${baseUrl}?${queryString}` : baseUrl;
+  if (message) params.append('message', message);
+  const query = params.toString();
+  return query ? `${base}?${query}` : base;
 };
 
 /**
- * Validate a Nimiq address format
+ * Validate a Nimiq address (NQ + 2 check digits + 32 base32 chars, optionally
+ * grouped in 4s by spaces).
  */
 export const isValidAddress = (address: string): boolean => {
-  // Nimiq addresses start with NQ and are 36-40 chars (with spaces: NQ94 XXXX XXXX...)
-  const nimiqPattern = /^NQ[A-Z0-9\s]{30,34}$/;
-  return nimiqPattern.test(address);
+  const clean = address.replace(/\s/g, '').toUpperCase();
+  return /^NQ[0-9]{2}[0-9A-Z]{32}$/.test(clean);
 };
 
 /**
- * Format address for display (shortened version)
+ * Format an address for display (shortened).
  */
 export const formatAddress = (address: string): string => {
   if (!address) return '';
   const clean = address.replace(/\s/g, '');
-  return `${clean.substring(0, 8)}...${clean.substring(clean.length - 6)}`;
+  if (clean.length <= 14) return clean;
+  return `${clean.substring(0, 8)}…${clean.substring(clean.length - 6)}`;
 };

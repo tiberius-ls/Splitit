@@ -1,64 +1,51 @@
 'use client';
 
-import { init } from '@nimiq/mini-app-sdk';
+import { init, getHostLanguage, type NimiqProvider } from '@nimiq/mini-app-sdk';
 
-export interface NimiqProvider {
-  initialized: boolean;
-  accounts: string[];
-  account: string | null;
-  listAccounts: () => Promise<string[]>;
-  sign: (message: string) => Promise<any>;
-}
+export type { NimiqProvider };
 
-let nimiqInstance: NimiqProvider | null = null;
+/** 1 NIM = 100,000 Lunas. The wallet API works in Lunas. */
+export const LUNAS_PER_NIM = 1e5;
 
-const isErrorResponse = (response: any): response is { error: string } => {
-  return response && typeof response === 'object' && 'error' in response;
+export const nimToLunas = (nim: number): number => Math.round(nim * LUNAS_PER_NIM);
+export const lunasToNim = (lunas: number): number => lunas / LUNAS_PER_NIM;
+
+/** Narrowing guard for the SDK's `{ error: { type, message } }` shape. */
+export const isErrorResponse = (
+  value: unknown,
+): value is { error: { type: string; message: string } } => {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'error' in value &&
+    typeof (value as { error: unknown }).error === 'object'
+  );
 };
 
-export const initNimiq = async (): Promise<NimiqProvider> => {
-  if (nimiqInstance?.initialized) {
-    return nimiqInstance;
+let providerPromise: Promise<NimiqProvider> | null = null;
+
+/**
+ * Resolve the injected Nimiq provider. Outside Nimiq Pay this rejects after the
+ * SDK's timeout ("provider was not injected"). The promise is cached so repeated
+ * callers share a single handshake.
+ */
+export const getProvider = (timeout = 8000): Promise<NimiqProvider> => {
+  if (typeof window === 'undefined') {
+    return Promise.reject(new Error('Nimiq provider is only available in the browser'));
   }
-
-  try {
-    const sdk = await init();
-    
-    if (!sdk) {
-      throw new Error('Failed to initialize Nimiq SDK');
-    }
-
-    // Get available accounts
-    const accountsResponse = await sdk.listAccounts();
-    const accounts = isErrorResponse(accountsResponse) ? [] : (Array.isArray(accountsResponse) ? accountsResponse : []);
-    
-    nimiqInstance = {
-      initialized: true,
-      accounts: accounts,
-      account: accounts?.[0] || null,
-      listAccounts: async () => {
-        const updatedResponse = await sdk.listAccounts();
-        const updatedAccounts = isErrorResponse(updatedResponse) ? [] : (Array.isArray(updatedResponse) ? updatedResponse : []);
-        if (nimiqInstance) {
-          nimiqInstance.accounts = updatedAccounts;
-          nimiqInstance.account = updatedAccounts?.[0] || null;
-        }
-        return updatedAccounts;
-      },
-      sign: (message: string) => sdk.sign(message),
-    };
-
-    return nimiqInstance;
-  } catch (error) {
-    console.error('Failed to initialize Nimiq:', error);
-    throw error;
+  if (!providerPromise) {
+    providerPromise = init({ timeout }).catch((err) => {
+      // Reset so a later retry (e.g. after the user opens the app in Nimiq Pay) can succeed.
+      providerPromise = null;
+      throw err;
+    });
   }
+  return providerPromise;
 };
 
-export const getNimiq = (): NimiqProvider | null => {
-  return nimiqInstance;
-};
+/** True when the page is running inside a Nimiq Pay WebView (provider injected). */
+export const isInNimiqPay = (): boolean =>
+  typeof window !== 'undefined' && typeof window.nimiq !== 'undefined';
 
-export const resetNimiq = () => {
-  nimiqInstance = null;
-};
+/** User's language as selected in Nimiq Pay (ISO 639-1), or undefined outside it. */
+export const hostLanguage = (): string | undefined => getHostLanguage();

@@ -5,7 +5,9 @@ import styles from "./page.module.css";
 import { ArrowLeft, Check, Users, X, Share2, Copy, CheckCircle, Zap } from "lucide-react";
 import Link from "next/link";
 import { useWallet } from "@/lib/WalletContext";
-import { createSplit, calculateShares, formatSplitSummary } from "@/lib/splitService";
+import { createSplit, formatSplitSummary } from "@/lib/splitService";
+import { sendPayment, isValidAddress, formatAddress } from "@/lib/paymentService";
+import { addToHistory } from "@/lib/historyService";
 
 interface Participant {
   name: string;
@@ -14,11 +16,13 @@ interface Participant {
 type Step = "form" | "review" | "success" | "error";
 
 export default function NewSplit() {
-  const { connected, activeAccount, loading: walletLoading } = useWallet();
+  const { connected, activeAccount, provider, connect, loading: walletLoading } = useWallet();
   const [step, setStep] = useState<Step>("form");
   const [amount, setAmount] = useState("");
   const [purpose, setPurpose] = useState("");
-  const [currency, setCurrency] = useState<"NIM" | "USDT">("NIM");
+  const [recipient, setRecipient] = useState("");
+  // USDT settlement is not implemented yet — NIM only for now.
+  const currency = "NIM" as const;
   const [participants, setParticipants] = useState<Participant[]>([{ name: "You" }]);
   const [isAdding, setIsAdding] = useState(false);
   const [newParticipant, setNewParticipant] = useState("");
@@ -39,16 +43,16 @@ export default function NewSplit() {
     setParticipants(participants.filter((_, i) => i !== index));
   };
 
-  const isValid = 
-    amount !== "" && 
-    !isNaN(parseFloat(amount)) && 
+  const isValid =
+    amount !== "" &&
+    !isNaN(parseFloat(amount)) &&
     parseFloat(amount) > 0 &&
-    purpose.trim() !== "";
+    purpose.trim() !== "" &&
+    isValidAddress(recipient);
 
-  const splitAmount =
-    isValid
-      ? (parseFloat(amount) / participants.length).toFixed(2)
-      : "0.00";
+  const splitAmount = isValid
+    ? (parseFloat(amount) / participants.length).toFixed(2)
+    : "0.00";
 
   const handleSubmit = () => {
     if (!isValid) return;
@@ -61,7 +65,7 @@ export default function NewSplit() {
   };
 
   const handleConfirmSplit = async () => {
-    if (!connected || !activeAccount) {
+    if (!connected || !activeAccount || !provider) {
       setError("Wallet connection lost");
       setStep("error");
       return;
@@ -71,7 +75,7 @@ export default function NewSplit() {
     setError("");
 
     try {
-      // Create split record
+      // Record the split locally for the summary/share UI.
       const split = createSplit(
         purpose,
         parseFloat(amount),
@@ -80,16 +84,39 @@ export default function NewSplit() {
         activeAccount
       );
 
-      // For demo: simulate transaction hash
-      const mockTxHash = "0x" + Math.random().toString(16).slice(2);
-      setTransactionHash(mockTxHash);
+      // The connected user settles their own share on-chain to the payee.
+      const result = await sendPayment(provider, {
+        recipient,
+        amount: splitAmount,
+        message: `SplitIt: ${purpose}`,
+      });
 
-      console.log("✅ Split created:", split);
-      console.log("📝 Split summary:", formatSplitSummary(split));
+      if (!result.success) {
+        setError(result.message);
+        setStep("error");
+        return;
+      }
 
+      const txHash = result.tx ?? "";
+      setTransactionHash(txHash);
+
+      // Persist to local history so it shows up under Recent Activity.
+      addToHistory({
+        id: split.id,
+        title: purpose,
+        amount: parseFloat(splitAmount),
+        total: parseFloat(amount),
+        currency,
+        recipient,
+        txHash,
+        participants: participants.length,
+        createdAt: split.createdAt,
+      });
+
+      console.log("✅ Split settled:", split, formatSplitSummary(split));
       setStep("success");
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : "Failed to create split";
+      const errorMsg = err instanceof Error ? err.message : "Failed to settle split";
       setError(errorMsg);
       setStep("error");
     } finally {
@@ -101,7 +128,7 @@ export default function NewSplit() {
     setStep("form");
     setAmount("");
     setPurpose("");
-    setCurrency("NIM");
+    setRecipient("");
     setParticipants([{ name: "You" }]);
     setError("");
     setTransactionHash("");
@@ -167,7 +194,7 @@ export default function NewSplit() {
           </div>
 
           <div style={{ marginTop: "20px", padding: "12px", background: "rgba(34, 211, 238, 0.1)", borderRadius: "6px", fontSize: "12px", color: "rgba(248, 250, 252, 0.8)" }}>
-            💡 Payment requests will be sent to each participant. Confirm to proceed.
+            💡 You&apos;ll pay your share of <strong>{splitAmount} {currency}</strong> to {formatAddress(recipient)}. Nimiq Pay will ask you to confirm.
           </div>
         </section>
 
@@ -177,7 +204,7 @@ export default function NewSplit() {
           disabled={isProcessing}
           style={{ opacity: isProcessing ? 0.6 : 1, marginTop: "16px" }}
         >
-          {isProcessing ? "Processing..." : "Confirm & Create Split"}
+          {isProcessing ? "Confirm in Nimiq Pay…" : `Pay ${splitAmount} ${currency}`}
         </button>
         <button
           className={`glass-button ${styles.submitButton}`}
@@ -197,7 +224,7 @@ export default function NewSplit() {
           <button className={styles.backButton} onClick={handleReset}>
             <ArrowLeft size={24} color="white" />
           </button>
-          <div className={styles.title}>Split Created!</div>
+          <div className={styles.title}>Payment Sent!</div>
           <div className={styles.placeholder} />
         </header>
 
@@ -208,7 +235,7 @@ export default function NewSplit() {
 
           <h2 className={styles.successTitle}>{purpose}</h2>
           <p className={styles.successTotal}>
-            <span className={styles.currency}>{currency}</span> {parseFloat(amount).toFixed(2)}
+            <span className={styles.currency}>{currency}</span> {parseFloat(splitAmount).toFixed(2)}
           </p>
 
           <div className={styles.splitSummary}>
@@ -227,7 +254,7 @@ export default function NewSplit() {
 
           {transactionHash && (
             <div style={{ marginTop: "16px", padding: "12px", background: "rgba(16, 185, 129, 0.1)", borderRadius: "6px", fontSize: "11px", color: "var(--success)", fontFamily: "monospace", wordBreak: "break-all" }}>
-              <strong>TX Hash:</strong> {transactionHash}
+              <strong>Transaction:</strong> {transactionHash}
             </div>
           )}
 
@@ -286,14 +313,14 @@ export default function NewSplit() {
 
       {!connected && (
         <div style={{ padding: "12px", marginBottom: "16px", background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.3)", borderRadius: "8px", color: "#ef4444", fontSize: "12px" }}>
-          ⚠️ Connect wallet to create splits with real payments
+          ⚠️ Connect your wallet to settle splits with real NIM payments
         </div>
       )}
 
       <section className={`${styles.formCard} glass-panel`}>
         <div style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
           <div className={styles.inputGroup} style={{ flex: 1 }}>
-            <label>Amount</label>
+            <label>Total Amount</label>
             <input
               type="number"
               placeholder="0.00"
@@ -308,19 +335,19 @@ export default function NewSplit() {
             <label style={{ fontSize: "12px", marginBottom: "8px" }}>Currency</label>
             <select
               value={currency}
-              onChange={(e) => setCurrency(e.target.value as "NIM" | "USDT")}
               className="glass-input"
-              style={{ width: "80px", padding: "8px" }}
-              disabled={!connected}
+              style={{ width: "110px", padding: "8px" }}
+              disabled
+              title="USDT settlement is coming soon"
             >
               <option value="NIM">NIM</option>
-              <option value="USDT">USDT</option>
+              <option value="USDT" disabled>USDT (soon)</option>
             </select>
           </div>
         </div>
 
         <div className={styles.inputGroup}>
-          <label>What's it for?</label>
+          <label>What&apos;s it for?</label>
           <input
             type="text"
             placeholder="e.g. Dinner at Mario's"
@@ -329,6 +356,22 @@ export default function NewSplit() {
             onChange={(e) => setPurpose(e.target.value)}
             disabled={!connected}
           />
+        </div>
+
+        <div className={styles.inputGroup}>
+          <label>Pay to (Nimiq address)</label>
+          <input
+            type="text"
+            placeholder="NQ.. address of whoever fronted the bill"
+            className="glass-input"
+            value={recipient}
+            onChange={(e) => setRecipient(e.target.value)}
+            disabled={!connected}
+            style={{ fontFamily: "monospace", fontSize: "13px" }}
+          />
+          {recipient !== "" && !isValidAddress(recipient) && (
+            <span style={{ fontSize: "11px", color: "var(--danger)" }}>Not a valid Nimiq address</span>
+          )}
         </div>
 
         <div className={styles.inputGroup}>
@@ -369,7 +412,7 @@ export default function NewSplit() {
               <div className={styles.addParticipantRow}>
                 <input
                   type="text"
-                  placeholder="Name or Address"
+                  placeholder="Name"
                   className={`glass-input ${styles.addInput}`}
                   value={newParticipant}
                   onChange={(e) => setNewParticipant(e.target.value)}
@@ -396,12 +439,12 @@ export default function NewSplit() {
 
       <button
         className={`glass-button ${styles.submitButton}`}
-        onClick={handleSubmit}
-        disabled={!isValid || !connected}
-        style={{ opacity: !isValid || !connected ? 0.5 : 1 }}
+        onClick={connected ? handleSubmit : connect}
+        disabled={connected ? !isValid : walletLoading}
+        style={{ opacity: connected && !isValid ? 0.5 : 1 }}
       >
         <Zap size={18} style={{ marginRight: "8px" }} />
-        {walletLoading ? "Connecting..." : !connected ? "Connect Wallet" : "Review & Create"}
+        {walletLoading ? "Connecting…" : !connected ? "Connect Wallet" : "Review & Pay"}
       </button>
     </main>
   );

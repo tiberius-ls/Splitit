@@ -1,36 +1,56 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SplitIt — Nimiq Pay Mini App
 
-## Getting Started
+Split expenses with friends and settle up in **real NIM**, right inside Nimiq Pay.
 
-First, run the development server:
+SplitIt is a [Nimiq Mini App](https://nimiq.dev/mini-apps): a web app that runs in the
+Nimiq Pay WebView and talks to the wallet through the injected provider via
+[`@nimiq/mini-app-sdk`](https://www.npmjs.com/package/@nimiq/mini-app-sdk). Keys never
+leave the wallet — the app only *requests* actions, and Nimiq Pay shows a native
+confirmation dialog before anything is signed or sent.
+
+## Features
+
+- **Connect** — requests account access through Nimiq Pay (native consent dialog).
+- **New Split** — enter a bill, add participants, and settle your share by sending
+  **real NIM** to whoever fronted the bill via `sendBasicTransaction`.
+- **Request** — generate a scannable `nimiq:` payment-request QR for any amount.
+- **Live network status** — real consensus state and block height from the host.
+
+## Architecture
+
+| Path | Responsibility |
+| --- | --- |
+| `src/lib/nimiqProvider.ts` | Resolves the injected provider (`init()`), NIM⇄Luna helpers, error guard |
+| `src/lib/WalletContext.tsx` | React context: connect/disconnect, accounts, chain info |
+| `src/lib/paymentService.ts` | Real `sendBasicTransaction` payments, address validation, payment URIs |
+| `src/lib/splitService.ts` | Pure split math (shares, summaries) |
+| `src/app/` | Home, New Split, and Request screens |
+
+**Units:** the wallet API works in Lunas — `1 NIM = 100,000 Lunas`. Amounts entered in
+NIM are converted with `nimToLunas()` before sending.
+
+## Run locally
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000. Outside Nimiq Pay there is no injected provider, so the
+app detects this and prompts you to open it in Nimiq Pay — connecting and sending will
+not work in a plain browser by design.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Test inside Nimiq Pay
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Deploy the app to a public HTTPS URL (e.g. Vercel).
+2. Open it in Nimiq Pay via deeplink:
+   ```
+   nimiqpay://miniapp?url=https://your-app.example.com
+   ```
+3. Tap **Connect**, approve account access, then create a split and confirm the
+   payment in the native dialog.
 
-## Learn More
+## Roadmap
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- USDT settlement over EVM (`window.ethereum`) — UI present, marked *coming soon*.
+- Persisted split history and per-participant settlement tracking.
