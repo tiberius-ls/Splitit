@@ -50,7 +50,25 @@ not work in a plain browser by design.
 3. Tap **Connect**, approve account access, then create a split and confirm the
    payment in the native dialog.
 
+## Demo script (for judges)
+
+> Run inside Nimiq Pay via `nimiqpay://miniapp?url=<deployed-url>`.
+
+1. **Connect** — tap *Connect*, approve the native consent dialog. The home card
+   switches to live **block height** and *Consensus established ✓* (real host data).
+2. **Settle a split** — *New Split* → enter a small amount, a purpose, and a payee
+   Nimiq address → *Review & Pay* → confirm in Nimiq Pay. A **real on-chain NIM
+   transaction** is sent.
+3. **History** — the settled split appears under *Recent Activity* with its real
+   transaction (tap the chip to copy the full value).
+4. **Request** — *Request* generates a scannable `nimiq:` payment-request QR for any
+   amount, ready to share.
+
+Guardrails worth pointing out: invalid addresses and paying your own address are
+blocked before review; outside Nimiq Pay the app detects the missing provider and
+prompts to open in the wallet rather than failing silently.
+
 ## Roadmap
 
 - USDT settlement over EVM (`window.ethereum`) — UI present, marked *coming soon*.
-- Persisted split history and per-participant settlement tracking.
+- Per-participant settlement tracking and reminders.

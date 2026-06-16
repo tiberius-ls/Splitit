@@ -29,6 +29,17 @@ export default function NewSplit() {
   const [error, setError] = useState("");
   const [transactionHash, setTransactionHash] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [txCopied, setTxCopied] = useState(false);
+
+  const shortTx = (value: string): string =>
+    value.length > 24 ? `${value.slice(0, 10)}…${value.slice(-8)}` : value;
+
+  const copyTx = () => {
+    if (!transactionHash) return;
+    navigator.clipboard.writeText(transactionHash);
+    setTxCopied(true);
+    setTimeout(() => setTxCopied(false), 2000);
+  };
 
   const handleAddParticipant = () => {
     if (newParticipant.trim() !== "" && participants.length < 10) {
@@ -43,12 +54,17 @@ export default function NewSplit() {
     setParticipants(participants.filter((_, i) => i !== index));
   };
 
+  const normalize = (a: string) => a.replace(/\s/g, "").toUpperCase();
+  const isSelfSend =
+    !!activeAccount && isValidAddress(recipient) && normalize(recipient) === normalize(activeAccount);
+
   const isValid =
     amount !== "" &&
     !isNaN(parseFloat(amount)) &&
     parseFloat(amount) > 0 &&
     purpose.trim() !== "" &&
-    isValidAddress(recipient);
+    isValidAddress(recipient) &&
+    !isSelfSend;
 
   const splitAmount = isValid
     ? (parseFloat(amount) / participants.length).toFixed(2)
@@ -253,9 +269,17 @@ export default function NewSplit() {
           </div>
 
           {transactionHash && (
-            <div style={{ marginTop: "16px", padding: "12px", background: "rgba(16, 185, 129, 0.1)", borderRadius: "6px", fontSize: "11px", color: "var(--success)", fontFamily: "monospace", wordBreak: "break-all", overflowWrap: "anywhere", width: "100%", maxWidth: "100%", boxSizing: "border-box", textAlign: "left" }}>
-              <strong>Transaction:</strong> {transactionHash}
-            </div>
+            <button
+              onClick={copyTx}
+              title="Copy full transaction"
+              style={{ marginTop: "16px", padding: "12px 14px", background: "rgba(16, 185, 129, 0.1)", border: "none", borderRadius: "8px", color: "var(--success)", fontFamily: "monospace", fontSize: "12px", width: "100%", maxWidth: "100%", boxSizing: "border-box", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", cursor: "pointer" }}
+            >
+              <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "2px", minWidth: 0 }}>
+                <span style={{ fontSize: "10px", opacity: 0.7, textTransform: "uppercase", letterSpacing: "0.05em" }}>Transaction</span>
+                <span>{shortTx(transactionHash)}</span>
+              </span>
+              {txCopied ? <Check size={16} /> : <Copy size={16} />}
+            </button>
           )}
 
           <div className={styles.actionRow}>
@@ -371,6 +395,9 @@ export default function NewSplit() {
           />
           {recipient !== "" && !isValidAddress(recipient) && (
             <span style={{ fontSize: "11px", color: "var(--danger)" }}>Not a valid Nimiq address</span>
+          )}
+          {isSelfSend && (
+            <span style={{ fontSize: "11px", color: "var(--danger)" }}>That&apos;s your own address — pick whoever fronted the bill</span>
           )}
         </div>
 
