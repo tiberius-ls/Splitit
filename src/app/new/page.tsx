@@ -253,7 +253,7 @@ export default function NewSplit() {
           </div>
 
           {transactionHash && (
-            <div style={{ marginTop: "16px", padding: "12px", background: "rgba(16, 185, 129, 0.1)", borderRadius: "6px", fontSize: "11px", color: "var(--success)", fontFamily: "monospace", wordBreak: "break-all" }}>
+            <div style={{ marginTop: "16px", padding: "12px", background: "rgba(16, 185, 129, 0.1)", borderRadius: "6px", fontSize: "11px", color: "var(--success)", fontFamily: "monospace", wordBreak: "break-all", overflowWrap: "anywhere", width: "100%", maxWidth: "100%", boxSizing: "border-box", textAlign: "left" }}>
               <strong>Transaction:</strong> {transactionHash}
             </div>
           )}

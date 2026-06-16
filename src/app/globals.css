@@ -81,6 +81,9 @@ a {
 }
 
 .glass-input {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   background: rgba(15, 23, 42, 0.6);
   border: 1px solid var(--card-border);
   border-radius: 1rem;
