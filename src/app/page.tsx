@@ -35,9 +35,9 @@ export default function Home() {
         <span className={styles.balanceLabel}>Nimiq Network</span>
         {connected ? (
           <>
-            <div className={styles.balanceAmount}>
-              <span className={styles.currency}>BLOCK</span>{" "}
-              {chain.blockNumber !== null ? chain.blockNumber.toLocaleString() : "—"}
+            <div className={styles.balanceAmount} style={{ fontSize: "2rem" }}>
+              <span className={styles.currency}>BLOCK</span>
+              {chain.blockNumber !== null ? `#${chain.blockNumber.toLocaleString()}` : "—"}
             </div>
             <span style={{ fontSize: "12px", color: "rgba(248, 250, 252, 0.6)", marginTop: "8px" }}>
               {chain.consensus === null
