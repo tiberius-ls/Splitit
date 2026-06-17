@@ -1,20 +1,22 @@
 # SplitIt — Nimiq Pay Mini App
 
-Split expenses with friends and settle up in **real NIM**, right inside Nimiq Pay.
+Split expenses with friends and settle up in **real NIM or USDT**, right inside Nimiq Pay.
 
 SplitIt is a [Nimiq Mini App](https://nimiq.dev/mini-apps): a web app that runs in the
-Nimiq Pay WebView and talks to the wallet through the injected provider via
-[`@nimiq/mini-app-sdk`](https://www.npmjs.com/package/@nimiq/mini-app-sdk). Keys never
-leave the wallet — the app only *requests* actions, and Nimiq Pay shows a native
-confirmation dialog before anything is signed or sent.
+Nimiq Pay WebView and talks to the wallet through the injected providers — Nimiq via
+[`@nimiq/mini-app-sdk`](https://www.npmjs.com/package/@nimiq/mini-app-sdk) and EVM via
+`window.ethereum`. Keys never leave the wallet — the app only *requests* actions, and
+Nimiq Pay shows a native confirmation dialog before anything is signed or sent.
 
 ## Features
 
 - **Connect** — requests account access through Nimiq Pay (native consent dialog).
 - **New Split** — enter a bill, add participants, and settle your share by sending
-  **real NIM** to whoever fronted the bill via `sendBasicTransaction`.
+  **real NIM** (`sendBasicTransaction`) **or USDT on Polygon** (ERC-20 transfer over
+  `window.ethereum`) to whoever fronted the bill.
 - **Request** — generate a scannable `nimiq:` payment-request QR for any amount.
 - **Live network status** — real consensus state and block height from the host.
+- **History** — settled splits persist locally with their real transaction hashes.
 
 ## Architecture
 
@@ -22,12 +24,15 @@ confirmation dialog before anything is signed or sent.
 | --- | --- |
 | `src/lib/nimiqProvider.ts` | Resolves the injected provider (`init()`), NIM⇄Luna helpers, error guard |
 | `src/lib/WalletContext.tsx` | React context: connect/disconnect, accounts, chain info |
-| `src/lib/paymentService.ts` | Real `sendBasicTransaction` payments, address validation, payment URIs |
+| `src/lib/paymentService.ts` | Real NIM `sendBasicTransaction` payments, address validation, payment URIs |
+| `src/lib/evm.ts` | USDT-on-Polygon: chain switch + ERC-20 `transfer()` via `window.ethereum` |
 | `src/lib/splitService.ts` | Pure split math (shares, summaries) |
+| `src/lib/historyService.ts` | Local persistence of settled splits |
 | `src/app/` | Home, New Split, and Request screens |
 
-**Units:** the wallet API works in Lunas — `1 NIM = 100,000 Lunas`. Amounts entered in
-NIM are converted with `nimToLunas()` before sending.
+**Units:** the Nimiq wallet API works in Lunas — `1 NIM = 100,000 Lunas` (`nimToLunas()`).
+USDT on Polygon uses 6 decimals; amounts are converted to base units with `toTokenUnits()`
+before building the ERC-20 transfer. USDT settlement requires a small amount of POL for gas.
 
 ## Run locally
 
@@ -56,19 +61,20 @@ not work in a plain browser by design.
 
 1. **Connect** — tap *Connect*, approve the native consent dialog. The home card
    switches to live **block height** and *Consensus established ✓* (real host data).
-2. **Settle a split** — *New Split* → enter a small amount, a purpose, and a payee
-   Nimiq address → *Review & Pay* → confirm in Nimiq Pay. A **real on-chain NIM
+2. **Settle in NIM** — *New Split* → currency *NIM*, enter a small amount, a purpose,
+   and a payee `NQ…` address → *Review & Pay* → confirm. A **real on-chain NIM
    transaction** is sent.
-3. **History** — the settled split appears under *Recent Activity* with its real
-   transaction (tap the chip to copy the full value).
-4. **Request** — *Request* generates a scannable `nimiq:` payment-request QR for any
-   amount, ready to share.
+3. **Settle in USDT** — switch currency to *USDT*, enter a `0x…` payee → *Review & Pay*.
+   The app switches the wallet to **Polygon** and submits a **real ERC-20 USDT transfer**.
+4. **History** — settled splits appear under *Recent Activity* with their real
+   transaction hashes (tap the chip to copy the full value).
+5. **Request** — *Request* generates a scannable `nimiq:` payment-request QR.
 
-Guardrails worth pointing out: invalid addresses and paying your own address are
-blocked before review; outside Nimiq Pay the app detects the missing provider and
-prompts to open in the wallet rather than failing silently.
+Guardrails worth pointing out: addresses are validated per currency (`NQ…` vs `0x…`),
+paying your own address is blocked before review, and outside Nimiq Pay the app detects
+the missing provider and prompts to open in the wallet rather than failing silently.
 
 ## Roadmap
 
-- USDT settlement over EVM (`window.ethereum`) — UI present, marked *coming soon*.
 - Per-participant settlement tracking and reminders.
+- Additional EVM stablecoins/chains beyond USDT-on-Polygon.
