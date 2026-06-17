@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useWallet } from "@/lib/WalletContext";
 import { createSplit, formatSplitSummary } from "@/lib/splitService";
 import { sendPayment, isValidAddress, formatAddress } from "@/lib/paymentService";
+import { sendUsdtOnPolygon, isValidEvmAddress } from "@/lib/evm";
 import { addToHistory } from "@/lib/historyService";
 
 interface Participant {
@@ -21,8 +22,7 @@ export default function NewSplit() {
   const [amount, setAmount] = useState("");
   const [purpose, setPurpose] = useState("");
   const [recipient, setRecipient] = useState("");
-  // USDT settlement is not implemented yet — NIM only for now.
-  const currency = "NIM" as const;
+  const [currency, setCurrency] = useState<"NIM" | "USDT">("NIM");
   const [participants, setParticipants] = useState<Participant[]>([{ name: "You" }]);
   const [isAdding, setIsAdding] = useState(false);
   const [newParticipant, setNewParticipant] = useState("");
@@ -55,15 +55,20 @@ export default function NewSplit() {
   };
 
   const normalize = (a: string) => a.replace(/\s/g, "").toUpperCase();
+  const recipientValid =
+    currency === "NIM" ? isValidAddress(recipient) : isValidEvmAddress(recipient);
   const isSelfSend =
-    !!activeAccount && isValidAddress(recipient) && normalize(recipient) === normalize(activeAccount);
+    currency === "NIM" &&
+    !!activeAccount &&
+    isValidAddress(recipient) &&
+    normalize(recipient) === normalize(activeAccount);
 
   const isValid =
     amount !== "" &&
     !isNaN(parseFloat(amount)) &&
     parseFloat(amount) > 0 &&
     purpose.trim() !== "" &&
-    isValidAddress(recipient) &&
+    recipientValid &&
     !isSelfSend;
 
   const splitAmount = isValid
@@ -81,7 +86,7 @@ export default function NewSplit() {
   };
 
   const handleConfirmSplit = async () => {
-    if (!connected || !activeAccount || !provider) {
+    if (!connected || !activeAccount) {
       setError("Wallet connection lost");
       setStep("error");
       return;
@@ -101,19 +106,38 @@ export default function NewSplit() {
       );
 
       // The connected user settles their own share on-chain to the payee.
-      const result = await sendPayment(provider, {
-        recipient,
-        amount: splitAmount,
-        message: `SplitIt: ${purpose}`,
-      });
+      let ok: boolean;
+      let message: string;
+      let txHash = "";
 
-      if (!result.success) {
-        setError(result.message);
+      if (currency === "NIM") {
+        if (!provider) {
+          setError("Nimiq wallet connection lost");
+          setStep("error");
+          return;
+        }
+        const result = await sendPayment(provider, {
+          recipient,
+          amount: splitAmount,
+          message: `SplitIt: ${purpose}`,
+        });
+        ok = result.success;
+        message = result.message;
+        txHash = result.tx ?? "";
+      } else {
+        // USDT settles over EVM (Polygon) via window.ethereum.
+        const result = await sendUsdtOnPolygon(recipient, splitAmount);
+        ok = result.success;
+        message = result.message;
+        txHash = result.txHash ?? "";
+      }
+
+      if (!ok) {
+        setError(message);
         setStep("error");
         return;
       }
 
-      const txHash = result.tx ?? "";
       setTransactionHash(txHash);
 
       // Persist to local history so it shows up under Recent Activity.
@@ -358,14 +382,18 @@ export default function NewSplit() {
           <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
             <label style={{ fontSize: "12px", marginBottom: "8px" }}>Currency</label>
             <select
+              aria-label="Currency"
               value={currency}
+              onChange={(e) => {
+                setCurrency(e.target.value as "NIM" | "USDT");
+                setRecipient("");
+              }}
               className="glass-input"
               style={{ width: "110px", padding: "8px" }}
-              disabled
-              title="USDT settlement is coming soon"
+              disabled={!connected}
             >
               <option value="NIM">NIM</option>
-              <option value="USDT" disabled>USDT (soon)</option>
+              <option value="USDT">USDT</option>
             </select>
           </div>
         </div>
@@ -383,21 +411,30 @@ export default function NewSplit() {
         </div>
 
         <div className={styles.inputGroup}>
-          <label>Pay to (Nimiq address)</label>
+          <label>Pay to ({currency === "NIM" ? "Nimiq address" : "Polygon / 0x address"})</label>
           <input
             type="text"
-            placeholder="NQ.. address of whoever fronted the bill"
+            placeholder={
+              currency === "NIM"
+                ? "NQ.. address of whoever fronted the bill"
+                : "0x.. address of whoever fronted the bill"
+            }
             className="glass-input"
             value={recipient}
             onChange={(e) => setRecipient(e.target.value)}
             disabled={!connected}
             style={{ fontFamily: "monospace", fontSize: "13px" }}
           />
-          {recipient !== "" && !isValidAddress(recipient) && (
-            <span style={{ fontSize: "11px", color: "var(--danger)" }}>Not a valid Nimiq address</span>
+          {recipient !== "" && !recipientValid && (
+            <span style={{ fontSize: "11px", color: "var(--danger)" }}>
+              {currency === "NIM" ? "Not a valid Nimiq address" : "Not a valid 0x address"}
+            </span>
           )}
           {isSelfSend && (
             <span style={{ fontSize: "11px", color: "var(--danger)" }}>That&apos;s your own address — pick whoever fronted the bill</span>
+          )}
+          {currency === "USDT" && (
+            <span style={{ fontSize: "11px", color: "rgba(248,250,252,0.5)" }}>USDT settles on Polygon</span>
           )}
         </div>
 

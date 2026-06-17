@@ -7,9 +7,9 @@ export interface SettledSplit {
   title: string;
   /** Your share that was actually paid, in NIM. */
   amount: number;
-  /** The full bill, in NIM. */
+  /** The full bill, in the same currency. */
   total: number;
-  currency: 'NIM';
+  currency: 'NIM' | 'USDT';
   recipient: string;
   /** Serialized transaction returned by the wallet. */
   txHash: string;
