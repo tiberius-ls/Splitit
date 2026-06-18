@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import styles from "./page.module.css";
-import { ArrowDownRight, Plus, Receipt } from "lucide-react";
+import { ArrowDownRight, Plus, Receipt, PiggyBank } from "lucide-react";
 import Link from "next/link";
 import WalletStatus from "@/components/WalletStatus";
 import { useWallet } from "@/lib/WalletContext";
@@ -75,6 +75,16 @@ export default function Home() {
           <span>Request</span>
         </Link>
       </section>
+
+      <Link href="/jar" className={`${styles.actionButton} glass-panel`} style={{ flexDirection: "row", justifyContent: "flex-start", gap: "14px", padding: "18px 20px", marginBottom: "2.5rem" }}>
+        <div className={styles.iconWrapper}>
+          <PiggyBank size={24} color="white" />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+          <span style={{ fontWeight: 600 }}>Savings Jar</span>
+          <span style={{ fontSize: "12px", color: "rgba(248,250,252,0.6)" }}>Save together toward a shared goal</span>
+        </div>
+      </Link>
 
       <section>
         <h2 className={styles.sectionTitle}>Recent Activity</h2>
