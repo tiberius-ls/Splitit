@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, PiggyBank, Share2, Copy, Check, Zap } from "lucide-react";
 import { useWallet } from "@/lib/WalletContext";
@@ -10,17 +11,20 @@ import { decodeJar, jarLink, clampPercent, type Jar } from "@/lib/jarService";
 import { readJarBalance } from "@/lib/balance";
 
 export default function JarPage() {
+  // useSearchParams needs a Suspense boundary in the App Router.
+  return (
+    <Suspense fallback={null}>
+      <JarRouter />
+    </Suspense>
+  );
+}
+
+function JarRouter() {
   const { connected, activeAccount, provider, connect, loading: walletLoading } = useWallet();
-  const [jar, setJar] = useState<Jar | null>(null);
-  const [ready, setReady] = useState(false);
+  const search = useSearchParams();
+  // Reactive: re-derives whenever the query string changes (e.g. create → view).
+  const jar = decodeJar(search.toString());
 
-  // Read the jar config from the URL (client-only) so links are backendless.
-  useEffect(() => {
-    setJar(decodeJar(window.location.search));
-    setReady(true);
-  }, []);
-
-  if (!ready) return null;
   return jar ? (
     <ViewJar jar={jar} connected={connected} activeAccount={activeAccount} provider={provider} connect={connect} walletLoading={walletLoading} />
   ) : (
