@@ -7,7 +7,7 @@ import { ArrowLeft, PiggyBank, Share2, Copy, Check, Zap } from "lucide-react";
 import { useWallet } from "@/lib/WalletContext";
 import { sendPayment, isValidAddress, formatAddress } from "@/lib/paymentService";
 import { sendUsdtOnPolygon, isValidEvmAddress } from "@/lib/evm";
-import { decodeJar, jarLink, clampPercent, type Jar } from "@/lib/jarService";
+import { decodeJar, encodeJar, jarLink, clampPercent, getSavedJars, saveJar, type Jar } from "@/lib/jarService";
 import { readJarBalance } from "@/lib/balance";
 
 export default function JarPage() {
@@ -51,6 +51,11 @@ function CreateJar({
   const [address, setAddress] = useState("");
   const [link, setLink] = useState("");
   const [copied, setCopied] = useState(false);
+  const [saved, setSaved] = useState<Jar[]>([]);
+
+  useEffect(() => {
+    setSaved(getSavedJars());
+  }, []);
 
   const addrValid = currency === "NIM" ? isValidAddress(address) : isValidEvmAddress(address);
   const valid =
@@ -58,7 +63,9 @@ function CreateJar({
 
   const create = () => {
     if (!valid) return;
-    setLink(jarLink({ title: title.trim(), target: parseFloat(target), currency, address: address.trim() }));
+    const jar: Jar = { title: title.trim(), target: parseFloat(target), currency, address: address.trim() };
+    saveJar(jar);
+    setLink(jarLink(jar));
   };
 
   const copy = () => {
@@ -157,6 +164,30 @@ function CreateJar({
       >
         <PiggyBank size={18} /> {walletLoading ? "Connecting…" : !connected ? "Connect Wallet" : "Create & Get Link"}
       </button>
+
+      {saved.length > 0 && (
+        <section style={{ marginTop: 8 }}>
+          <h2 style={{ fontSize: "0.95rem", color: "#94a3b8", margin: "0 0 10px 4px" }}>Your Jars</h2>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {saved.map((j) => (
+              <Link
+                key={`${j.currency}:${j.address}:${j.title}`}
+                href={`/jar?${encodeJar(j)}`}
+                className="glass-panel"
+                style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px" }}
+              >
+                <PiggyBank size={22} color="var(--nimiq-gold)" />
+                <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                  <span style={{ fontWeight: 600 }}>{j.title}</span>
+                  <span style={{ fontSize: 12, color: "rgba(248,250,252,0.6)" }}>
+                    Goal {j.target.toLocaleString()} {j.currency}
+                  </span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
     </Shell>
   );
 }
@@ -194,6 +225,11 @@ function ViewJar({
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Remember any jar we open so it's reachable later from "Your Jars".
+  useEffect(() => {
+    saveJar(jar);
+  }, [jar.currency, jar.address, jar.title, jar.target]);
 
   const contribute = async () => {
     if (!connected || parseFloat(amount) <= 0) return;

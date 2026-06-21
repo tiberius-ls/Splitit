@@ -50,3 +50,46 @@ export const clampPercent = (raised: number, target: number): number => {
   if (target <= 0) return 0;
   return Math.max(0, Math.min(100, (raised / target) * 100));
 };
+
+/* ---------- Local persistence so jars survive leaving the page ---------- */
+
+const JARS_KEY = 'splitit:jars';
+
+const jarKey = (j: Jar): string => `${j.currency}:${j.address}:${j.title}`;
+
+/** All jars this device has created or opened (newest first). SSR-safe. */
+export const getSavedJars = (): Jar[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(JARS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? (parsed as Jar[]) : [];
+  } catch {
+    return [];
+  }
+};
+
+/** Remember a jar (dedup by currency+address+title), newest first. */
+export const saveJar = (jar: Jar): Jar[] => {
+  if (typeof window === 'undefined') return [];
+  const rest = getSavedJars().filter((j) => jarKey(j) !== jarKey(jar));
+  const next = [jar, ...rest].slice(0, 30);
+  try {
+    window.localStorage.setItem(JARS_KEY, JSON.stringify(next));
+  } catch {
+    // non-fatal
+  }
+  return next;
+};
+
+/** Forget a saved jar. */
+export const removeJar = (jar: Jar): Jar[] => {
+  if (typeof window === 'undefined') return [];
+  const next = getSavedJars().filter((j) => jarKey(j) !== jarKey(jar));
+  try {
+    window.localStorage.setItem(JARS_KEY, JSON.stringify(next));
+  } catch {
+    // non-fatal
+  }
+  return next;
+};
