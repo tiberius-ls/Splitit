@@ -8,12 +8,13 @@ import { POLYGON_USDT } from './evm';
  *
  * - USDT: queried from a public Polygon RPC via eth_call balanceOf (works for any
  *   viewer, even before they connect a wallet).
- * - NIM: queried from a Nimiq RPC if one is configured (NEXT_PUBLIC_NIM_RPC).
- *   Falls back to null when unavailable so the UI degrades gracefully.
+ * - NIM: queried from a public Nimiq Albatross RPC (nimiqwatch, free & rate-limited)
+ *   by default; override with NEXT_PUBLIC_NIM_RPC. Falls back to null on failure so
+ *   the UI degrades gracefully.
  */
 
 const POLYGON_RPC = process.env.NEXT_PUBLIC_POLYGON_RPC || 'https://polygon-rpc.com';
-const NIM_RPC = process.env.NEXT_PUBLIC_NIM_RPC || '';
+const NIM_RPC = process.env.NEXT_PUBLIC_NIM_RPC || 'https://rpc.nimiqwatch.com';
 
 /** USDT balance (human units) of an EVM address on Polygon, or null on failure. */
 export const readUsdtBalance = async (address: string): Promise<number | null> => {
@@ -37,6 +38,16 @@ export const readUsdtBalance = async (address: string): Promise<number | null> =
   }
 };
 
+/**
+ * The Albatross RPC only accepts the user-friendly spaced address format
+ * (NQxx xxxx … in groups of 4); a spaceless address errors with "Unknown format".
+ * App code stores addresses with spacing stripped, so re-format before querying.
+ */
+const toSpacedAddress = (address: string): string => {
+  const clean = address.replace(/\s/g, '').toUpperCase();
+  return clean.match(/.{1,4}/g)?.join(' ') ?? clean;
+};
+
 /** NIM balance (human units) of a Nimiq address, or null if no RPC / on failure. */
 export const readNimBalance = async (address: string): Promise<number | null> => {
   if (!NIM_RPC) return null;
@@ -48,7 +59,7 @@ export const readNimBalance = async (address: string): Promise<number | null> =>
         jsonrpc: '2.0',
         id: 1,
         method: 'getAccountByAddress',
-        params: [address],
+        params: [toSpacedAddress(address)],
       }),
     });
     const json = await res.json();
