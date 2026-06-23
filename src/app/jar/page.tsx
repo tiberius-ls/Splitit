@@ -1,13 +1,13 @@
 "use client";
 
 import { Suspense, useEffect, useState, useCallback } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, PiggyBank, Share2, Copy, Check, Zap } from "lucide-react";
+import { ArrowLeft, PiggyBank, Share2, Copy, Check, Zap, Trash2, Download } from "lucide-react";
 import { useWallet } from "@/lib/WalletContext";
 import { sendPayment, isValidAddress, formatAddress } from "@/lib/paymentService";
-import { sendUsdtOnPolygon, isValidEvmAddress } from "@/lib/evm";
-import { decodeJar, encodeJar, jarLink, clampPercent, getSavedJars, saveJar, type Jar } from "@/lib/jarService";
+import { sendUsdtOnPolygon, isValidEvmAddress, requestEvmAccount, detectEvm } from "@/lib/evm";
+import { decodeJar, encodeJar, jarLink, clampPercent, getSavedJars, saveJar, removeJar, type Jar } from "@/lib/jarService";
 import { readJarBalance } from "@/lib/balance";
 
 export default function JarPage() {
@@ -170,20 +170,28 @@ function CreateJar({
           <h2 style={{ fontSize: "0.95rem", color: "#94a3b8", margin: "0 0 10px 4px" }}>Your Jars</h2>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {saved.map((j) => (
-              <Link
+              <div
                 key={`${j.currency}:${j.address}:${j.title}`}
-                href={`/jar?${encodeJar(j)}`}
                 className="glass-panel"
                 style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px" }}
               >
-                <PiggyBank size={22} color="var(--nimiq-gold)" />
-                <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-                  <span style={{ fontWeight: 600 }}>{j.title}</span>
-                  <span style={{ fontSize: 12, color: "rgba(248,250,252,0.6)" }}>
-                    Goal {j.target.toLocaleString()} {j.currency}
-                  </span>
-                </div>
-              </Link>
+                <Link href={`/jar?${encodeJar(j)}`} style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}>
+                  <PiggyBank size={22} color="var(--nimiq-gold)" />
+                  <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                    <span style={{ fontWeight: 600 }}>{j.title}</span>
+                    <span style={{ fontSize: 12, color: "rgba(248,250,252,0.6)" }}>
+                      Goal {j.target.toLocaleString()} {j.currency}
+                    </span>
+                  </div>
+                </Link>
+                <button
+                  aria-label={`Remove ${j.title}`}
+                  onClick={() => setSaved(removeJar(j))}
+                  style={{ background: "none", border: "none", color: "rgba(248,250,252,0.45)", cursor: "pointer", padding: 6, display: "flex" }}
+                >
+                  <Trash2 size={18} />
+                </button>
+              </div>
             ))}
           </div>
         </section>
@@ -209,11 +217,26 @@ function ViewJar({
   connect: () => void;
   walletLoading: boolean;
 }) {
+  const router = useRouter();
   const [raised, setRaised] = useState<number | null>(null);
   const [loadingBal, setLoadingBal] = useState(true);
   const [amount, setAmount] = useState("");
   const [status, setStatus] = useState<{ ok: boolean; msg: string } | null>(null);
   const [sending, setSending] = useState(false);
+
+  // Withdraw is only meaningful for the owner of the collector address, because a
+  // wallet can only send *from itself* — the app can't pull funds it doesn't control.
+  // NIM: the connected (active) account must equal the jar address.
+  // USDT: a wallet-authorized EVM account must equal the jar address.
+  const norm = (a: string) => a.replace(/\s/g, "").toUpperCase();
+  const isNimOwner =
+    jar.currency === "NIM" && connected && !!activeAccount && norm(activeAccount) === norm(jar.address);
+  const [evmOwner, setEvmOwner] = useState(false);
+  const [wdAddr, setWdAddr] = useState("");
+  const [wdAmount, setWdAmount] = useState("");
+  const [wdStatus, setWdStatus] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [withdrawing, setWithdrawing] = useState(false);
+  const isOwner = isNimOwner || evmOwner;
 
   const refresh = useCallback(async () => {
     setLoadingBal(true);
@@ -225,6 +248,57 @@ function ViewJar({
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Best-effort EVM ownership check (eth_accounts does not prompt).
+  useEffect(() => {
+    if (jar.currency !== "USDT") return;
+    void detectEvm().then((info) =>
+      setEvmOwner(info.accounts.some((a) => a.toLowerCase() === jar.address.toLowerCase())),
+    );
+  }, [jar.currency, jar.address]);
+
+  const withdraw = async () => {
+    const amt = wdAmount.trim() === "" ? raised ?? 0 : parseFloat(wdAmount);
+    const dest = wdAddr.trim();
+    const destValid = jar.currency === "NIM" ? isValidAddress(dest) : isValidEvmAddress(dest);
+    if (!destValid) {
+      setWdStatus({ ok: false, msg: `Enter a valid ${jar.currency === "NIM" ? "Nimiq" : "0x"} destination address` });
+      return;
+    }
+    if (!(amt > 0)) {
+      setWdStatus({ ok: false, msg: "Nothing to withdraw yet" });
+      return;
+    }
+    setWithdrawing(true);
+    setWdStatus(null);
+    try {
+      if (jar.currency === "NIM") {
+        if (!provider) throw new Error("Nimiq wallet not connected");
+        const r = await sendPayment(provider, { recipient: dest, amount: String(amt), message: `Withdraw: ${jar.title}` });
+        setWdStatus({ ok: r.success, msg: r.message });
+        if (r.success) setTimeout(() => void refresh(), 2500);
+      } else {
+        // Verify the connected EVM wallet actually owns the jar before sending.
+        const acct = await requestEvmAccount();
+        if (acct.toLowerCase() !== jar.address.toLowerCase()) {
+          setWdStatus({ ok: false, msg: "Connect the wallet that owns this jar to withdraw." });
+        } else {
+          const r = await sendUsdtOnPolygon(dest, String(amt));
+          setWdStatus({ ok: r.success, msg: r.message });
+          if (r.success) setTimeout(() => void refresh(), 2500);
+        }
+      }
+    } catch (e) {
+      setWdStatus({ ok: false, msg: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setWithdrawing(false);
+    }
+  };
+
+  const forget = () => {
+    removeJar(jar);
+    router.push("/jar");
+  };
 
   // Remember any jar we open so it's reachable later from "Your Jars".
   useEffect(() => {
@@ -315,9 +389,58 @@ function ViewJar({
         </button>
       </section>
 
+      {/* Owner-only: withdraw the collected funds. The jar isn't an escrow — funds
+          sit in the collector wallet, so only its owner (this connected wallet) can move them. */}
+      {isOwner && (
+        <section className="glass-panel" style={{ ...card, border: "1px solid rgba(251,191,36,0.35)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Download size={18} color="var(--nimiq-gold)" />
+            <span style={{ fontWeight: 600 }}>You own this jar — withdraw funds</span>
+          </div>
+          <p style={{ fontSize: 12, color: "rgba(248,250,252,0.6)", margin: 0 }}>
+            Send the collected {jar.currency} from this jar to any address — e.g. to spend it once the goal is reached.
+          </p>
+          <Field label={`Destination address (${jar.currency === "NIM" ? "NQ…" : "0x… on Polygon"})`}>
+            <input
+              className="glass-input"
+              style={{ fontFamily: "monospace", fontSize: 13 }}
+              placeholder={jar.currency === "NIM" ? "NQ.." : "0x.."}
+              value={wdAddr}
+              onChange={(e) => setWdAddr(e.target.value)}
+            />
+          </Field>
+          <Field label={`Amount (${jar.currency})`}>
+            <input
+              className="glass-input"
+              type="number"
+              placeholder={raised != null ? `${raised} (full pot)` : "0.00"}
+              value={wdAmount}
+              onChange={(e) => setWdAmount(e.target.value)}
+            />
+          </Field>
+          {wdStatus && (
+            <div style={{ ...statusBox, background: wdStatus.ok ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)", color: wdStatus.ok ? "var(--success)" : "var(--danger)" }}>
+              {wdStatus.msg}
+            </div>
+          )}
+          <button
+            className="glass-button"
+            style={{ ...btn, background: "rgba(251,191,36,0.2)" }}
+            onClick={withdraw}
+            disabled={withdrawing}
+          >
+            <Download size={18} /> {withdrawing ? "Confirm in wallet…" : "Withdraw"}
+          </button>
+        </section>
+      )}
+
       <Link href="/jar" className="glass-button" style={{ ...btn, background: "rgba(82,113,255,0.2)", textAlign: "center" }}>
         Start your own jar
       </Link>
+
+      <button onClick={forget} style={{ ...linkBtn, textAlign: "center", margin: "0 auto", display: "flex", alignItems: "center", gap: 6, color: "rgba(248,250,252,0.45)" }}>
+        <Trash2 size={14} /> Remove this jar from my list
+      </button>
     </Shell>
   );
 }
