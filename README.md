@@ -16,7 +16,9 @@ Nimiq Pay shows a native confirmation dialog before anything is signed or sent.
   `window.ethereum`) to whoever fronted the bill.
 - **Savings Jar** — create a shared savings goal with a collector address, share a
   link, and friends chip in real NIM/USDT. The progress bar tracks the pot's **live
-  on-chain balance** — no backend, the blockchain is the shared state.
+  on-chain balance** — no backend, the blockchain is the shared state. The jar owner
+  can **withdraw** the collected funds to any address once the goal is reached, and
+  any saved jar can be **removed** from your list.
 - **Request** — generate a scannable `nimiq:` payment-request QR for any amount.
 - **Live network status** — real consensus state and block height from the host.
 - **History** — settled splits persist locally with their real transaction hashes.
@@ -39,10 +41,19 @@ Nimiq Pay shows a native confirmation dialog before anything is signed or sent.
 USDT on Polygon uses 6 decimals; amounts are converted to base units with `toTokenUnits()`
 before building the ERC-20 transfer. USDT settlement requires a small amount of POL for gas.
 
-**Jar balances:** USDT jars read their live balance from a public Polygon RPC out of the
-box. NIM jars show live progress only when a Nimiq RPC is configured via the
-`NEXT_PUBLIC_NIM_RPC` env var (set it in Vercel → Environment Variables); without it, NIM
-jars still accept on-chain contributions but hide the live progress bar.
+**Jar balances:** both currencies read live balance out of the box — USDT from a public
+Polygon RPC (`balanceOf`), NIM from a public Nimiq Albatross RPC (`getAccountByAddress`,
+defaulting to `rpc.nimiqwatch.com`). Override either with `NEXT_PUBLIC_POLYGON_RPC` /
+`NEXT_PUBLIC_NIM_RPC` (e.g. a self-hosted node, or a testnet RPC if demoing on testnet).
+The Albatross RPC only accepts the spaced address format, so addresses are re-formatted
+before querying.
+
+**Withdrawal model:** a jar is *not* an escrow contract — contributions collect at the
+plain collector address, so whoever owns that address's key controls the funds. The
+in-app **Withdraw** panel therefore appears only to the connected wallet that owns the
+collector address (verified on-chain at send time for USDT); everyone else just sees
+progress + *Chip in*. This keeps v1 fully backendless and honest; a trustless escrow
+contract is the v2 step (see Roadmap).
 
 ## Run locally
 
@@ -79,6 +90,8 @@ not work in a plain browser by design.
 4. **Savings Jar** — *Savings Jar* → set a goal + collector address → get a shareable
    link. Open the link: the progress bar reflects the pot's **live on-chain balance**,
    and *Chip in* sends a real contribution. Share the link to pull friends into Nimiq Pay.
+   As the jar **owner**, a *Withdraw* panel lets you sweep the collected funds to any
+   address (a real on-chain send) — the full create → fund → withdraw loop, no backend.
 5. **History** — settled splits appear under *Recent Activity* with their real
    transaction hashes (tap the chip to copy the full value).
 6. **Request** — *Request* generates a scannable `nimiq:` payment-request QR.
@@ -89,5 +102,9 @@ the missing provider and prompts to open in the wallet rather than failing silen
 
 ## Roadmap
 
+- **Trustless jar escrow** — replace the plain collector address with a smart-contract
+  escrow (USDT on Polygon) that only releases on goal/owner approval, so contributors
+  don't have to trust the collector. v1 is deliberately backendless and trust-based
+  (group money among people who already know each other); this is the trustless step.
 - Per-participant settlement tracking and reminders.
 - Additional EVM stablecoins/chains beyond USDT-on-Polygon.
