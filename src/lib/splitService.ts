@@ -40,54 +40,6 @@ export const calculateShares = (
 };
 
 /**
- * Create payment requests for each participant
- */
-export const createSplitPaymentRequests = (
-  split: Split,
-  myAddress: string
-): Array<{
-  participant: SplitParticipant;
-  amount: number;
-  message: string;
-}> => {
-  const shares = calculateShares(split.totalAmount, split.participants);
-  const requests: Array<{
-    participant: SplitParticipant;
-    amount: number;
-    message: string;
-  }> = [];
-
-  split.participants.forEach((participant) => {
-    if (participant.name !== 'You') {
-      const amount = shares.get(participant.name) || 0;
-      const message = `Split payment for: ${split.title} (${amount} ${split.currency})`;
-      
-      requests.push({
-        participant,
-        amount,
-        message,
-      });
-    }
-  });
-
-  return requests;
-};
-
-/**
- * Calculate who owes whom in a split
- */
-export const calculateBalances = (split: Split): Map<string, number> => {
-  const balances = new Map<string, number>();
-  const shares = calculateShares(split.totalAmount, split.participants);
-
-  split.participants.forEach((p) => {
-    balances.set(p.name, shares.get(p.name) || 0);
-  });
-
-  return balances;
-};
-
-/**
  * Generate unique split ID
  */
 export const generateSplitId = (): string => {

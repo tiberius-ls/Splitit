@@ -83,24 +83,6 @@ export const sendPayment = async (
 };
 
 /**
- * Create a Nimiq payment request URI for a QR code.
- * Format: nimiq:<address>?amount=<NIM>&message=<text>
- */
-export const createPaymentRequest = (
-  address: string,
-  amount: string,
-  message?: string,
-): string => {
-  if (!address) return '';
-  const base = `nimiq:${address.replace(/\s/g, '')}`;
-  const params = new URLSearchParams();
-  if (amount) params.append('amount', amount);
-  if (message) params.append('message', message);
-  const query = params.toString();
-  return query ? `${base}?${query}` : base;
-};
-
-/**
  * Validate a Nimiq address (NQ + 2 check digits + 32 base32 chars, optionally
  * grouped in 4s by spaces).
  */
